@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indoor Footy Strategy Board</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+header {
+  text-align: center;
+  padding: 16px 20px 6px;
+  width: 100%;
+  max-width: 1100px;
+}
+header h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+header p { font-size: 13px; color: #999; margin-top: 2px; }
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 1100px;
+  padding: 0 16px 20px;
+  gap: 10px;
+}
+.canvas-wrap {
+  position: relative;
+  width: 100%;
+  background: #16213e;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.4);
+}
+#fieldCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: default;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #16213e;
+  border-radius: 10px;
+  width: 100%;
+}
+.controls select, .controls button {
+  background: #0f3460;
+  color: #eee;
+  border: 1px solid #1a4a7a;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.controls select:hover, .controls button:hover {
+  background: #1a4a7a;
+}
+.controls select:disabled, .controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.controls button.active {
+  background: #e94560;
+  border-color: #e94560;
+}
+.controls button.active:hover {
+  background: #d63850;
+}
+.controls .step-info {
+  font-size: 13px;
+  color: #aaa;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.controls .desc {
+  width: 100%;
+  text-align: center;
+  font-size: 14px;
+  color: #ccc;
+  padding: 4px 0 0;
+  min-height: 22px;
+  border-top: 1px solid #1a3a5a;
+}
+.controls .desc strong {
+  color: #fff;
+}
+.step-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.step-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2a4a7a;
+  transition: background .2s, transform .2s;
+  cursor: pointer;
+}
+.step-dots .dot.active {
+  background: #e94560;
+  transform: scale(1.3);
+}
+.step-dots .dot.done {
+  background: #4a8aaa;
+}
+@media (max-width: 600px) {
+  header h1 { font-size: 18px; }
+  .controls { gap: 5px; padding: 8px 10px; }
+  .controls select, .controls button { font-size: 12px; padding: 5px 10px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Indoor Footy Strategy Board</h1>
+  <p>7-a-side tactical visualiser &mdash; use arrow keys to step through</p>
+</header>
+<div id="app">
+  <div class="canvas-wrap">
+    <canvas id="fieldCanvas"></canvas>
+  </div>
+  <div class="controls">
+    <select id="scenarioSelect"></select>
+    <button id="prevBtn" disabled>&#9664; Prev</button>
+    <span class="step-info" id="stepInfo">0 / 0</span>
+    <button id="nextBtn" disabled>Next &#9654;</button>
+    <button id="playBtn">&#9654; Play</button>
+    <button id="resetBtn">&#8634; Reset</button>
+    <div class="step-dots" id="stepDots"></div>
+    <div class="desc" id="stepDesc">Select a scenario to begin</div>
+  </div>
+</div>
+<script>
+// ─── SCENARIOS ───────────────────────────────────────────────────────
+// Each scenario defines a series of steps. Each step contains:
+//   desc     – description of what happens in this step
+//   ball     – { x, y } ball position (0-100 length, 0-60 width)
+//   offense  – array of { label, x, y } for the attacking team (7 players)
+//   defense  – array of { label, x, y } for the defending team (7 players)
+//
+// Field coordinates:
+//   x: 0 (defensive goal) to 100 (attacking goal)
+//   y: 0 (top sideline) to 60 (bottom sideline)
+
+const SCENARIOS = [
+  {
+    id: 'draw-out-zone',
+    title: 'Draw Out the Zone',
+    desc: 'Breaking down a deep-zoning defence by drawing them out and finding a free shot.',
+    steps: [
+      {
+        desc: 'M handballs to F in the left pocket — zone pinches inside, every defender inside the arc.',
+        offense: [
+          { label: 'A', x: 35, y: 25 },
+          { label: 'D', x: 45, y: 10 },
+          { label: 'D', x: 45, y: 46 },
+          { label: 'M', x: 65, y: 20 },
+          { label: 'M', x: 70, y: 10, ball: true },
+          { label: 'F', x: 90, y: 20 },
+          { label: 'F', x: 65, y: 40 },
+        ],
+        defense: [
+          { label: '', x: 68, y: 22 },
+          { label: '', x: 65, y: 44 },
+          { label: '', x: 75, y: 15 },
+          { label: '', x: 75, y: 40 },
+          { label: '', x: 85, y: 12 },
+          { label: '', x: 80, y: 30 },
+          { label: '', x: 90, y: 35 },
+        ],
+      },
+      {
+        desc: 'Quick hands to F — draws the zone up to close the space.',
+        offense: [
+          { label: 'A', x: 40, y: 25 },
+          { label: 'D', x: 48, y: 10 },
+          { label: 'D', x: 48, y: 46 },
+          { label: 'M', x: 75, y: 20 },
+          { label: 'M', x: 70, y: 10 },
+          { label: 'F', x: 85, y: 18, ball: true },
+          { label: 'F', x: 65, y: 40 },
+        ],
+        defense: [
+          { label: '', x: 68, y: 22 },
+          { label: '', x: 75, y: 40 },
+          { label: '', x: 75, y: 15 },
+          { label: '', x: 80, y: 28 },
+          { label: '', x: 85, y: 12 },
+          { label: '', x: 95, y: 30 },
+          { label: '', x: 90, y: 20 },
+        ],
+      },
+      {
+        desc: 'F feeds back to M at the top of the arc — defenders push up to close, leaving space behind them.',
+        offense: [
+          { label: 'A', x: 45, y: 25 },
+          { label: 'D', x: 55, y: 10 },
+          { label: 'D', x: 60, y: 46 },
+          { label: 'M', x: 80, y: 22, ball: true },
+          { label: 'M', x: 75, y: 5 },
+          { label: 'F', x: 85, y: 18 },
+          { label: 'F', x: 75, y: 40 },
+        ],
+        defense: [
+          { label: '', x: 78, y: 25 },
+          { label: '', x: 80, y: 40 },
+          { label: '', x: 75, y: 15 },
+          { label: '', x: 85, y: 28 },
+          { label: '', x: 85, y: 12 },
+          { label: '', x: 95, y: 30 },
+          { label: '', x: 90, y: 20 },
+        ],
+      },
+      {
+        desc: 'M kicks to A sweeping through the middle — set shot, no pressure.',
+        offense: [
+          { label: 'A', x: 60, y: 25, ball: true },
+          { label: 'D', x: 55, y: 10 },
+          { label: 'D', x: 65, y: 50 },
+          { label: 'M', x: 80, y: 22 },
+          { label: 'M', x: 75, y: 5 },
+          { label: 'F', x: 85, y: 18 },
+          { label: 'F', x: 75, y: 40 },
+        ],
+        defense: [
+          { label: '', x: 78, y: 25 },
+          { label: '', x: 80, y: 40 },
+          { label: '', x: 75, y: 15 },
+          { label: '', x: 85, y: 28 },
+          { label: '', x: 85, y: 12 },
+          { label: '', x: 95, y: 30 },
+          { label: '', x: 90, y: 20 },
+        ],
+      },
+      {
+        desc: 'Easy goal from A.',
+        offense: [
+          { label: 'A', x: 60, y: 25, ball: true },
+          { label: 'D', x: 55, y: 10 },
+          { label: 'D', x: 65, y: 50 },
+          { label: 'M', x: 80, y: 22 },
+          { label: 'M', x: 75, y: 5 },
+          { label: 'F', x: 85, y: 18 },
+          { label: 'F', x: 75, y: 40 },
+        ],
+        defense: [
+          { label: '', x: 78, y: 25 },
+          { label: '', x: 80, y: 40 },
+          { label: '', x: 75, y: 15 },
+          { label: '', x: 85, y: 28 },
+          { label: '', x: 85, y: 12 },
+          { label: '', x: 95, y: 30 },
+          { label: '', x: 90, y: 20 },
+        ],
+        goal: true,
+      },
+    ],
+  },
+  {
+    id: 'draw-out-defender',
+    title: 'Draw Out the Defender',
+    desc: 'Breaking down a deep-zoning defence by drawing them out and finding a free shot.',
+    steps: [
+      {
+        desc: 'M carries to the top of the arc — six defenders packed inside, one stays deep as sweeper.',
+        offense: [
+          { label: 'A', x: 45, y: 25 },
+          { label: 'D', x: 50, y: 10 },
+          { label: 'D', x: 60, y: 46 },
+          { label: 'M', x: 80, y: 22, ball: true },
+          { label: 'M', x: 65, y: 18 },
+          { label: 'F', x: 85, y: 18 },
+          { label: 'F', x: 75, y: 40 },
+        ],
+        defense: [
+          { label: '', x: 78, y: 25 },
+          { label: '', x: 80, y: 40 },
+          { label: '', x: 63, y: 21 },
+          { label: '', x: 85, y: 28 },
+          { label: '', x: 85, y: 12 },
+          { label: '', x: 95, y: 30 },
+          { label: '', x: 90, y: 20 },
+        ],
+      },
+      {
+        desc: 'D makes an attacking run to draw out the sweeper, opening space behind.',
+        offense: [
+          { label: 'A', x: 50, },
+          { label: 'D',},
+          { label: 'D', y: 40 },
+          { label: 'M',},
+          { label: 'M', x: 75, y: 15 },
+          { label: 'F', x: 85, y: 15,},
+          { label: 'F', x: 80, y: 35, ball: true},
+        ],
+        defense: [
+          { label: '' },
+          { label: '' },
+          { label: '', x: 75, y: 20 },
+          { label: '', x: 87, y: 35 },
+          { label: '' },
+          { label: '' },
+          { label: '' },
+        ],
+      },
+      {
+        desc: 'F dishes to D running into the empty corridor — set shot, all day.',
+        offense: [
+          { label: 'A', x: 55, },
+          { label: 'D',},
+          { label: 'D', y: 35, ball: true },
+          { label: 'M',},
+          { label: 'M', x: 75, y: 15 },
+          { label: 'F', x: 85, y: 15,},
+          { label: 'F', x: 80, y: 35},
+        ],
+        defense: [
+          { label: '' },
+          { label: '' },
+          { label: '', x: 75, y: 20 },
+          { label: '', x: 87, y: 35 },
+          { label: '' },
+          { label: '' },
+          { label: '' },
+        ],
+      },
+      {
+        desc: 'D kicks...and scores',
+        offense: [
+          { label: 'A', x: 55, },
+          { label: 'D',},
+          { label: 'D', y: 35, ball: true },
+          { label: 'M',},
+          { label: 'M', x: 75, y: 15 },
+          { label: 'F', x: 85, y: 15,},
+          { label: 'F', x: 80, y: 35},
+        ],
+        defense: [
+          { label: '' },
+          { label: '' },
+          { label: '', x: 75, y: 20 },
+          { label: '', x: 87, y: 35 },
+          { label: '' },
+          { label: '' },
+          { label: '' },
+        ],
+        goal: true,
+      },
+    ],
+  },
+  {
+    id: 'kick-in',
+    title: 'Kick-in from Defence',
+    desc: 'Moving the ball out of the defensive zone after a behind.',
+    steps: [
+      {
+        desc: 'Goal line setup — Anchor deepest, Defenders spread wide.',
+        offense: [
+          { label: 'A', x: 14, y: 30, ball: true },
+          { label: 'D', x: 24, y: 16 },
+          { label: 'D', x: 24, y: 44 },
+          { label: 'M', x: 38, y: 12 },
+          { label: 'M', x: 38, y: 48 },
+          { label: 'F', x: 56, y: 22 },
+          { label: 'F', x: 56, y: 38 },
+        ],
+        defense: [
+          { label: 'F', x: 78, y: 18 },
+          { label: 'F', x: 78, y: 42 },
+          { label: 'F', x: 65, y: 30 },
+          { label: 'M', x: 88, y: 14 },
+          { label: 'M', x: 88, y: 46 },
+          { label: 'D', x: 93, y: 24 },
+          { label: 'D', x: 93, y: 36 },
+        ],
+      },
+      {
+        desc: 'Short kick to M on the wing — Ds push up in support.',
+        offense: [
+          { label: 'A', x: 18, y: 30 },
+          { label: 'D', x: 32, y: 20 },
+          { label: 'D', x: 32, y: 42 },
+          { label: 'M', x: 28, y: 12, ball: true },
+          { label: 'M', x: 40, y: 48 },
+          { label: 'F', x: 56, y: 22 },
+          { label: 'F', x: 56, y: 38 },
+        ],
+        defense: [
+          { label: 'F', x: 46, y: 12 },
+          { label: 'F', x: 78, y: 42 },
+          { label: 'F', x: 65, y: 30 },
+          { label: 'M', x: 60, y: 20 },
+          { label: 'M', x: 88, y: 46 },
+          { label: 'D', x: 82, y: 26 },
+          { label: 'D', x: 93, y: 36 },
+        ],
+      },
+      {
+        desc: 'Switch play across the middle — M hits F leading up the corridor.',
+        offense: [
+          { label: 'A', x: 22, y: 30 },
+          { label: 'D', x: 38, y: 18 },
+          { label: 'D', x: 36, y: 44 },
+          { label: 'M', x: 46, y: 16 },
+          { label: 'M', x: 44, y: 46 },
+          { label: 'F', x: 56, y: 22, ball: true },
+          { label: 'F', x: 62, y: 36 },
+        ],
+        defense: [
+          { label: 'F', x: 56, y: 14 },
+          { label: 'F', x: 78, y: 42 },
+          { label: 'F', x: 65, y: 30 },
+          { label: 'M', x: 60, y: 20 },
+          { label: 'M', x: 78, y: 42 },
+          { label: 'D', x: 72, y: 28 },
+          { label: 'D', x: 88, y: 34 },
+        ],
+      },
+      {
+        desc: 'F has space for a shot on goal!',
+        offense: [
+          { label: 'A', x: 24, y: 30 },
+          { label: 'D', x: 40, y: 16 },
+          { label: 'D', x: 38, y: 44 },
+          { label: 'M', x: 50, y: 14 },
+          { label: 'M', x: 48, y: 46 },
+          { label: 'F', x: 72, y: 30, ball: true },
+          { label: 'F', x: 64, y: 36 },
+        ],
+        defense: [
+          { label: 'F', x: 60, y: 22 },
+          { label: 'F', x: 80, y: 38 },
+          { label: 'F', x: 68, y: 32 },
+          { label: 'M', x: 76, y: 18 },
+          { label: 'M', x: 82, y: 44 },
+          { label: 'D', x: 90, y: 26 },
+          { label: 'D', x: 90, y: 34 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'centre-bounce',
+    title: 'Centre Bounce — Attack',
+    desc: 'Winning the centre bounce and surging forward.',
+    steps: [
+      {
+        desc: 'Centre bounce setup — mids ready, Fs pushing forward.',
+        offense: [
+          { label: 'A', x: 16, y: 30 },
+          { label: 'D', x: 30, y: 16 },
+          { label: 'D', x: 30, y: 44 },
+          { label: 'M', x: 50, y: 24, ball: true },
+          { label: 'M', x: 50, y: 36 },
+          { label: 'F', x: 66, y: 22 },
+          { label: 'F', x: 66, y: 38 },
+        ],
+        defense: [
+          { label: 'F', x: 34, y: 24 },
+          { label: 'F', x: 34, y: 36 },
+          { label: 'M', x: 50, y: 20 },
+          { label: 'M', x: 50, y: 40 },
+          { label: 'D', x: 70, y: 22 },
+          { label: 'D', x: 70, y: 38 },
+          { label: 'A', x: 84, y: 30 },
+        ],
+      },
+      {
+        desc: 'M wins the tap — quick handball to the running M.',
+        offense: [
+          { label: 'A', x: 16, y: 30 },
+          { label: 'D', x: 30, y: 16 },
+          { label: 'D', x: 30, y: 44 },
+          { label: 'M', x: 56, y: 24, ball: true },
+          { label: 'M', x: 44, y: 40 },
+          { label: 'F', x: 66, y: 22 },
+          { label: 'F', x: 66, y: 38 },
+        ],
+        defense: [
+          { label: 'F', x: 38, y: 22 },
+          { label: 'F', x: 34, y: 40 },
+          { label: 'M', x: 52, y: 18 },
+          { label: 'M', x: 50, y: 44 },
+          { label: 'D', x: 70, y: 22 },
+          { label: 'D', x: 70, y: 38 },
+          { label: 'A', x: 84, y: 30 },
+        ],
+      },
+      {
+        desc: 'M delivers inside 50 — F leads to the pocket and marks.',
+        offense: [
+          { label: 'A', x: 18, y: 30 },
+          { label: 'D', x: 34, y: 18 },
+          { label: 'D', x: 32, y: 44 },
+          { label: 'M', x: 56, y: 26 },
+          { label: 'M', x: 48, y: 44 },
+          { label: 'F', x: 78, y: 28, ball: true },
+          { label: 'F', x: 70, y: 38 },
+        ],
+        defense: [
+          { label: 'F', x: 42, y: 20 },
+          { label: 'F', x: 38, y: 42 },
+          { label: 'M', x: 58, y: 22 },
+          { label: 'M', x: 54, y: 46 },
+          { label: 'D', x: 76, y: 24 },
+          { label: 'D', x: 76, y: 36 },
+          { label: 'A', x: 88, y: 30 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'forward-press',
+    title: 'Forward Press',
+    desc: 'Applying pressure high up the field to force a turnover.',
+    steps: [
+      {
+        desc: 'Setup — Fs and Ms push high, Ds hold the midline.',
+        offense: [
+          { label: 'A', x: 24, y: 30 },
+          { label: 'D', x: 38, y: 18 },
+          { label: 'D', x: 38, y: 42 },
+          { label: 'M', x: 58, y: 14, ball: true },
+          { label: 'M', x: 58, y: 46 },
+          { label: 'F', x: 74, y: 22 },
+          { label: 'F', x: 74, y: 38 },
+        ],
+        defense: [
+          { label: 'D', x: 82, y: 20 },
+          { label: 'D', x: 82, y: 40 },
+          { label: 'M', x: 66, y: 14 },
+          { label: 'M', x: 66, y: 46 },
+          { label: 'F', x: 50, y: 20 },
+          { label: 'F', x: 50, y: 40 },
+          { label: 'A', x: 90, y: 30 },
+        ],
+      },
+      {
+        desc: 'Defense kicks short — F and M converge to trap.',
+        offense: [
+          { label: 'A', x: 24, y: 30 },
+          { label: 'D', x: 38, y: 18 },
+          { label: 'D', x: 38, y: 42 },
+          { label: 'M', x: 62, y: 18, ball: true },
+          { label: 'M', x: 58, y: 44 },
+          { label: 'F', x: 72, y: 16 },
+          { label: 'F', x: 74, y: 36 },
+        ],
+        defense: [
+          { label: 'D', x: 76, y: 14 },
+          { label: 'D', x: 82, y: 40 },
+          { label: 'M', x: 66, y: 22 },
+          { label: 'M', x: 66, y: 46 },
+          { label: 'F', x: 52, y: 22 },
+          { label: 'F', x: 50, y: 42 },
+          { label: 'A', x: 90, y: 30 },
+        ],
+      },
+      {
+        desc: 'Turnover! F intercepts and swings it to the middle.',
+        offense: [
+          { label: 'A', x: 24, y: 30 },
+          { label: 'D', x: 38, y: 18 },
+          { label: 'D', x: 38, y: 42 },
+          { label: 'M', x: 60, y: 20 },
+          { label: 'M', x: 58, y: 44 },
+          { label: 'F', x: 72, y: 16, ball: true },
+          { label: 'F', x: 74, y: 36 },
+        ],
+        defense: [
+          { label: 'D', x: 68, y: 12 },
+          { label: 'D', x: 78, y: 36 },
+          { label: 'M', x: 60, y: 26 },
+          { label: 'M', x: 62, y: 46 },
+          { label: 'F', x: 48, y: 24 },
+          { label: 'F', x: 50, y: 42 },
+          { label: 'A', x: 90, y: 30 },
+        ],
+      },
+      {
+        desc: 'Quick pass to F in the centre — shot on goal!',
+        offense: [
+          { label: 'A', x: 26, y: 30 },
+          { label: 'D', x: 40, y: 20 },
+          { label: 'D', x: 38, y: 42 },
+          { label: 'M', x: 62, y: 22 },
+          { label: 'M', x: 60, y: 44 },
+          { label: 'F', x: 76, y: 30, ball: true },
+          { label: 'F', x: 76, y: 38 },
+        ],
+        defense: [
+          { label: 'D', x: 72, y: 20 },
+          { label: 'D', x: 78, y: 40 },
+          { label: 'M', x: 64, y: 28 },
+          { label: 'M', x: 66, y: 46 },
+          { label: 'F', x: 48, y: 24 },
+          { label: 'F', x: 50, y: 42 },
+          { label: 'A', x: 90, y: 30 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'defensive-zone',
+    title: 'Defensive Zone',
+    desc: 'Sitting in a structured zone to protect a late lead.',
+    steps: [
+      {
+        desc: 'Zone set — all players behind the ball, clogging the corridor.',
+        offense: [
+          { label: 'F', x: 56, y: 26 },
+          { label: 'F', x: 56, y: 34 },
+          { label: 'M', x: 40, y: 20 },
+          { label: 'M', x: 40, y: 40 },
+          { label: 'D', x: 28, y: 18 },
+          { label: 'D', x: 28, y: 42 },
+          { label: 'A', x: 16, y: 30 },
+        ],
+        defense: [
+          { label: 'A', x: 84, y: 30 },
+          { label: 'D', x: 74, y: 20 },
+          { label: 'D', x: 74, y: 40 },
+          { label: 'M', x: 62, y: 24, ball: true },
+          { label: 'M', x: 62, y: 36 },
+          { label: 'F', x: 48, y: 22 },
+          { label: 'F', x: 48, y: 38 },
+        ],
+      },
+      {
+        desc: 'Defense swings the ball — zone slides across to protect the middle.',
+        offense: [
+          { label: 'F', x: 56, y: 26 },
+          { label: 'F', x: 54, y: 34 },
+          { label: 'M', x: 44, y: 18 },
+          { label: 'M', x: 44, y: 40 },
+          { label: 'D', x: 30, y: 18 },
+          { label: 'D', x: 30, y: 42 },
+          { label: 'A', x: 16, y: 30 },
+        ],
+        defense: [
+          { label: 'A', x: 84, y: 30 },
+          { label: 'D', x: 72, y: 18 },
+          { label: 'D', x: 74, y: 42 },
+          { label: 'M', x: 60, y: 20, ball: true },
+          { label: 'M', x: 62, y: 38 },
+          { label: 'F', x: 46, y: 20 },
+          { label: 'F', x: 48, y: 40 },
+        ],
+      },
+      {
+        desc: 'Defense kicks long — D and A are positioned to mark and clear.',
+        offense: [
+          { label: 'F', x: 56, y: 26 },
+          { label: 'F', x: 54, y: 34 },
+          { label: 'M', x: 46, y: 22 },
+          { label: 'M', x: 44, y: 40 },
+          { label: 'D', x: 30, y: 22 },
+          { label: 'D', x: 30, y: 38 },
+          { label: 'A', x: 16, y: 30 },
+        ],
+        defense: [
+          { label: 'A', x: 84, y: 30 },
+          { label: 'D', x: 72, y: 20 },
+          { label: 'D', x: 74, y: 40 },
+          { label: 'M', x: 56, y: 24 },
+          { label: 'M', x: 58, y: 36 },
+          { label: 'F', x: 44, y: 24, ball: true },
+          { label: 'F', x: 46, y: 36 },
+        ],
+      },
+    ],
+  },
+];
+
+// ─── FIELD CONSTANTS ──────────────────────────────────────────────
+const FL = 100;
+const FW = 60;
+const GOAL_W = 10;
+const GOAL_DEPTH = 3;
+const BEHIND_GAP = 5;
+const GOAL_CREASE_R = 20;
+const CENTER_CIRCLE_R = 8;
+const PLAYER_R = 2.2;
+const BALL_R = 1;
+const ANIM_MS = 700;
+
+// ─── STATE ──────────────────────────────────────────────────────────
+let scenarioIdx = 1;
+let stepIdx = 0;
+let animating = false;
+let animStart = 0;
+let animFrom = null;
+let playing = false;
+let playTimer = null;
+
+// interpolated poses for current render
+let interpOffense = [];
+let interpDefense = [];
+let ballTrail = [];
+
+// ─── STEP EXPANSION ────────────────────────────────────────────────
+// Allows steps to omit x/y on players that haven't moved — values
+// are inherited from the previous step. Arrays can also be shorter
+// than 7; missing entries fill from the previous step.
+function expandStep(step, prev, count) {
+  const expandArr = (arr, prevArr) => {
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      const p = arr[i] || {};
+      const prevP = prevArr ? prevArr[i] || {} : {};
+      result.push({
+        label: p.label !== undefined ? p.label : prevP.label,
+        x: p.x !== undefined ? p.x : prevP.x,
+        y: p.y !== undefined ? p.y : prevP.y,
+        ball: p.ball !== undefined ? p.ball : undefined,
+      });
+    }
+    return result;
+  };
+  return {
+    desc: step.desc,
+    offense: expandArr(step.offense, prev ? prev.offense : null),
+    defense: expandArr(step.defense, prev ? prev.defense : null),
+    goal: step.goal === true ? true : undefined,
+  };
+}
+
+function preExpand(scenario) {
+  let prev = null;
+  scenario.steps = scenario.steps.map(step => {
+    const expanded = expandStep(step, prev, 7);
+    prev = expanded;
+    return expanded;
+  });
+}
+
+// ─── DOM REFS ──────────────────────────────────────────────────────
+const canvas = document.getElementById('fieldCanvas');
+const ctx = canvas.getContext('2d');
+const sel = document.getElementById('scenarioSelect');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const playBtn = document.getElementById('playBtn');
+const resetBtn = document.getElementById('resetBtn');
+const stepInfo = document.getElementById('stepInfo');
+const stepDesc = document.getElementById('stepDesc');
+const stepDots = document.getElementById('stepDots');
+
+// ─── SCENARIO SELECT ───────────────────────────────────────────────
+function buildSelect() {
+  sel.innerHTML = '';
+  SCENARIOS.forEach((s, i) => {
+    const o = document.createElement('option');
+    o.value = i;
+    o.textContent = s.title;
+    sel.appendChild(o);
+  });
+  sel.value = scenarioIdx;
+}
+
+sel.addEventListener('change', () => {
+  scenarioIdx = +sel.value;
+  stopPlay();
+  goToStep(0);
+});
+
+// ─── NAVIGATION ────────────────────────────────────────────────────
+function goToStep(idx) {
+  const sc = SCENARIOS[scenarioIdx];
+  stepIdx = Math.max(0, Math.min(idx, sc.steps.length - 1));
+  animating = false;
+  animFrom = null;
+  stopPlay();
+  updateUI();
+  render();
+}
+
+function nextStep() {
+  const sc = SCENARIOS[scenarioIdx];
+  if (stepIdx >= sc.steps.length - 1 || animating) return;
+
+  const from = sc.steps[stepIdx];
+  const oldCarrier = from.offense.find(p => p.ball) || from.defense.find(p => p.ball);
+  animFrom = {
+    offense: from.offense.map(p => ({ ...p })),
+    defense: from.defense.map(p => ({ ...p })),
+    ballX: oldCarrier ? oldCarrier.x : 50,
+    ballY: oldCarrier ? oldCarrier.y : 30,
+  };
+  stepIdx++;
+  animating = true;
+  animStart = performance.now();
+  updateUI();
+  requestAnimationFrame(animate);
+}
+
+function prevStep() {
+  if (stepIdx <= 0 || animating) return;
+
+  const sc = SCENARIOS[scenarioIdx];
+  const from = sc.steps[stepIdx];
+  const oldCarrier = from.offense.find(p => p.ball) || from.defense.find(p => p.ball);
+  animFrom = {
+    offense: from.offense.map(p => ({ ...p })),
+    defense: from.defense.map(p => ({ ...p })),
+    ballX: from.goal ? 100 : (oldCarrier ? oldCarrier.x : 50),
+    ballY: from.goal ? 30 : (oldCarrier ? oldCarrier.y : 30),
+  };
+  stepIdx--;
+  animating = true;
+  animStart = performance.now();
+  updateUI();
+  requestAnimationFrame(animate);
+}
+
+function togglePlay() {
+  if (playing) { stopPlay(); return; }
+  const sc = SCENARIOS[scenarioIdx];
+  if (stepIdx >= sc.steps.length - 1) goToStep(0);
+  playing = true;
+  playBtn.textContent = '\u23F8 Pause';
+  playBtn.classList.add('active');
+  tickPlay();
+}
+
+function stopPlay() {
+  playing = false;
+  if (playTimer) { clearTimeout(playTimer); playTimer = null; }
+  playBtn.textContent = '\u25B6 Play';
+  playBtn.classList.remove('active');
+}
+
+function tickPlay() {
+  if (!playing) return;
+  const sc = SCENARIOS[scenarioIdx];
+  if (stepIdx >= sc.steps.length - 1) { stopPlay(); return; }
+  nextStep();
+  playTimer = setTimeout(tickPlay, ANIM_MS + 700);
+}
+
+function resetView() {
+  stopPlay();
+  goToStep(0);
+}
+
+prevBtn.addEventListener('click', prevStep);
+nextBtn.addEventListener('click', nextStep);
+playBtn.addEventListener('click', togglePlay);
+resetBtn.addEventListener('click', resetView);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') nextStep();
+  if (e.key === 'ArrowLeft') prevStep();
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+});
+
+// ─── UI UPDATE ─────────────────────────────────────────────────────
+function updateUI() {
+  const sc = SCENARIOS[scenarioIdx];
+  const total = sc.steps.length;
+  prevBtn.disabled = stepIdx <= 0;
+  nextBtn.disabled = stepIdx >= total - 1;
+  stepInfo.textContent = `${stepIdx + 1} / ${total}`;
+
+  const st = sc.steps[stepIdx];
+  stepDesc.innerHTML = `<strong>Step ${stepIdx + 1}:</strong> ${st.desc}`;
+
+  stepDots.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('span');
+    const cls = i === stepIdx ? ' active' : i < stepIdx ? ' done' : '';
+    d.className = 'dot' + cls;
+    d.addEventListener('click', () => { stopPlay(); goToStep(i); });
+    stepDots.appendChild(d);
+  }
+}
+
+// ─── RENDER ─────────────────────────────────────────────────────────
+function resizeCanvas() {
+  const wrap = canvas.parentElement;
+  const w = wrap.clientWidth;
+  const ratio = FW / FL;
+  canvas.width = w * window.devicePixelRatio;
+  canvas.height = w * ratio * window.devicePixelRatio;
+  canvas.style.width = w + 'px';
+  canvas.style.height = (w * ratio) + 'px';
+}
+
+function fx(x) { return (x / FL) * canvas.width; }
+function fy(y) { return (y / FW) * canvas.height; }
+
+
+function render() {
+  const sc = SCENARIOS[scenarioIdx];
+  const st = sc.steps[stepIdx];
+
+  let progress = 1;
+  if (animating && animFrom) {
+    progress = Math.min(1, (performance.now() - animStart) / ANIM_MS);
+    if (progress >= 1) {
+      animating = false;
+      animFrom = null;
+    }
+  }
+
+  if (animating && animFrom) {
+    interpOffense = animFrom.offense.map((s, i) => ({
+      label: st.offense[i].label,
+      ball: st.offense[i].ball,
+      x: s.x + (st.offense[i].x - s.x) * progress,
+      y: s.y + (st.offense[i].y - s.y) * progress,
+    }));
+    interpDefense = animFrom.defense.map((s, i) => ({
+      label: st.defense[i].label,
+      ball: st.defense[i].ball,
+      x: s.x + (st.defense[i].x - s.x) * progress,
+      y: s.y + (st.defense[i].y - s.y) * progress,
+    }));
+  } else {
+    interpOffense = st.offense.map(p => ({ ...p }));
+    interpDefense = st.defense.map(p => ({ ...p }));
+  }
+
+  // ── Ball position ──
+  let ballX, ballY;
+  let ballCarrier = null;
+
+  if (animating && animFrom) {
+    if (st.goal) {
+      const sx = animFrom.ballX, sy = animFrom.ballY;
+      ballX = sx + (100 - sx) * progress;
+      ballY = sy + (30 - sy) * progress;
+      ballTrail = [{ x: sx, y: sy }, { x: ballX, y: ballY }];
+    } else {
+      const newCarrier = st.offense.find(p => p.ball) || st.defense.find(p => p.ball);
+      if (newCarrier) {
+        ballX = animFrom.ballX + (newCarrier.x - animFrom.ballX) * progress;
+        ballY = animFrom.ballY + (newCarrier.y - animFrom.ballY) * progress;
+      }
+      const trailEnd = newCarrier
+        ? { x: newCarrier.x, y: newCarrier.y }
+        : (ballX !== undefined ? { x: ballX, y: ballY } : null);
+      ballTrail = trailEnd
+        ? [{ x: animFrom.ballX, y: animFrom.ballY }, trailEnd]
+        : [];
+    }
+  } else if (st.goal) {
+    ballX = 100;
+    ballY = 30;
+    if (stepIdx > 0) {
+      const prevSt = sc.steps[stepIdx - 1];
+      const prevCarrier = prevSt.offense.find(p => p.ball) || prevSt.defense.find(p => p.ball);
+      if (prevCarrier) {
+        ballTrail = [{ x: prevCarrier.x, y: prevCarrier.y }, { x: 100, y: 30 }];
+      } else {
+        ballTrail = [];
+      }
+    } else {
+      ballTrail = [];
+    }
+  } else {
+    ballCarrier = interpOffense.find(p => p.ball) || interpDefense.find(p => p.ball);
+    if (ballCarrier) { ballX = ballCarrier.x; ballY = ballCarrier.y; }
+    if (stepIdx > 0 && ballCarrier) {
+      const prevSt = sc.steps[stepIdx - 1];
+      const prevCarrier = prevSt.offense.find(p => p.ball) || prevSt.defense.find(p => p.ball);
+      if (prevCarrier) {
+        ballTrail = [{ x: prevCarrier.x, y: prevCarrier.y }, { x: ballX, y: ballY }];
+      } else {
+        ballTrail = [];
+      }
+    } else {
+      ballTrail = [];
+    }
+  }
+
+  drawField();
+  drawBallTrail();
+  drawLabel('OFFENSE', interpOffense, true);
+  drawLabel('DEFENSE', interpDefense, false);
+  drawPlayers(interpDefense, '#4a8ab5', '#1a3a5a');
+  drawPlayers(interpOffense, '#e99545', '#8a5510');
+  if (ballX !== undefined) {
+    drawBall(ballX, ballY);
+  }
+
+  if (animating) {
+    requestAnimationFrame(animate);
+  }
+}
+
+function animate(ts) {
+  render();
+}
+
+// ─── FIELD DRAWING ────────────────────────────────────────────────
+function drawField() {
+  const w = canvas.width, h = canvas.height;
+
+  ctx.fillStyle = '#2d6a3a';
+  ctx.fillRect(0, 0, w, h);
+
+  for (let i = 0; i < 20; i++) {
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
+    ctx.fillRect(i * (w / 20), 0, w / 20, h);
+  }
+
+  ctx.save();
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(4, 4, w - 8, h - 8);
+
+  const cx = fx(50);
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath();
+  ctx.moveTo(cx, 4);
+  ctx.lineTo(cx, h - 4);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.arc(cx, fy(30), fx(CENTER_CIRCLE_R), 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, fy(30), 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  // 1/3 lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 6]);
+  [fx(25), fx(75)].forEach(x => {
+    ctx.beginPath();
+    ctx.moveTo(x, 4);
+    ctx.lineTo(x, h - 4);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  drawGoalCrease(0, true);
+  drawGoalCrease(w, false);
+
+  drawGoal(0, true);
+  drawGoal(w, false);
+
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = `${Math.round(fx(3.5))}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('DEFENSIVE END', fx(15), fy(55));
+  ctx.fillText('ATTACKING END', fx(85), fy(55));
+}
+
+function drawGoalCrease(xPos, isLeft) {
+  const gy = fy(30);
+  const gr = fx(GOAL_CREASE_R);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  const startAngle = isLeft ? -Math.PI / 2 : Math.PI / 2;
+  const endAngle = isLeft ? Math.PI / 2 : -Math.PI / 2;
+  ctx.arc(xPos, gy, gr, startAngle, endAngle);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawGoal(xPos, isLeft) {
+  const gy = fy(30);
+  const gp = fy(GOAL_W) / 2;
+  const bp = fy(GOAL_W / 2 + BEHIND_GAP);
+
+  ctx.fillStyle = '#fff';
+  [-gp, gp].forEach(off => {
+    ctx.beginPath();
+    ctx.arc(xPos, gy + off, fx(1.2), 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = '#ccc';
+  [-bp, bp].forEach(off => {
+    ctx.beginPath();
+    ctx.arc(xPos, gy + off, fx(0.8), 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ─── PLAYERS ───────────────────────────────────────────────────────
+function drawPlayers(players, color, borderColor) {
+  players.forEach(p => {
+    const px = fx(p.x), py = fy(p.y);
+    const r = fx(PLAYER_R);
+
+    ctx.beginPath();
+    ctx.arc(px + 1, py + 1, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(1000,0,0,0.3)';
+    ctx.fill();
+
+    const grad = ctx.createRadialGradient(px - r * 0.3, py - r * 0.3, 0, px, py, r);
+    grad.addColorStop(0, lightenColor(color, 30));
+    grad.addColorStop(1, color);
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    if (p.label) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.round(fx(2.8))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.label, px, py);
+    }
+  });
+}
+
+function drawLabel(text, players, isOffense) {
+  if (players.length === 0) return;
+  const sumX = players.reduce((s, p) => s + p.x, 0) / players.length;
+  const sumY = players.reduce((s, p) => s + p.y, 0) / players.length;
+  const px = fx(sumX), py = fy(sumY) - fx(PLAYER_R) - 8;
+
+  ctx.fillStyle = isOffense ? 'rgba(233,149,69,0.5)' : 'rgba(74,138,181,0.5)';
+  ctx.font = `bold ${Math.round(fx(2.2))}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(text, px, py);
+}
+
+function drawBall(px, py) {
+  const cx = fx(px), cy = fy(py);
+  const rx = fx(BALL_R) * 1.6;
+  const ry = fx(BALL_R);
+
+  let angle = 0;
+  if (ballTrail.length >= 2) {
+    const from = ballTrail[0], to = ballTrail[1];
+    angle = Math.atan2(to.y - from.y, to.x - from.x);
+  }
+
+  ctx.save();
+
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx * 2);
+  glow.addColorStop(0, 'rgba(255,220,50,0.15)');
+  glow.addColorStop(1, 'rgba(255,220,50,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, rx * 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#f5c842';
+  ctx.fill();
+  ctx.strokeStyle = '#b8860b';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(-rx * 0.6, 0);
+  ctx.lineTo(rx * 0.6, 0);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBallTrail() {
+  if (ballTrail.length < 2) return;
+  const from = ballTrail[0], to = ballTrail[1];
+  const x1 = fx(from.x), y1 = fy(from.y);
+  const x2 = fx(to.x), y2 = fy(to.y);
+
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(255,220,50,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const aLen = fx(2.5);
+  ctx.fillStyle = 'rgba(255,220,50,0.6)';
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - aLen * Math.cos(angle - 0.4), y2 - aLen * Math.sin(angle - 0.4));
+  ctx.lineTo(x2 - aLen * Math.cos(angle + 0.4), y2 - aLen * Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// ─── COLOR HELPERS ────────────────────────────────────────────────
+function lightenColor(hex, amt) {
+  let c = parseInt(hex.slice(1), 16);
+  let r = Math.min(255, (c >> 16) + amt);
+  let g = Math.min(255, ((c >> 8) & 0xff) + amt);
+  let b = Math.min(255, (c & 0xff) + amt);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────
+function init() {
+  SCENARIOS.forEach(preExpand);
+  buildSelect();
+  resizeCanvas();
+  goToStep(0);
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    render();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
